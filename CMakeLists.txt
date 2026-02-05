@@ -1,0 +1,74 @@
+#
+# Copyright (C) Rodolfo Herrera Hernandez. All rights reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+
+cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
+
+project(grain-segmentation VERSION 1.0.0 LANGUAGES CXX)
+
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type")
+set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel RelWithDebInfo)
+
+find_package(coretoolkit REQUIRED)
+find_package(structure-identification REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(fmt REQUIRED)
+find_package(nlohmann_json REQUIRED)
+find_package(OpenMP REQUIRED)
+
+file(GLOB FUNCTION_SOURCES ${CMAKE_SOURCE_DIR}/src/functions/*.cpp)
+file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
+	${CMAKE_SOURCE_DIR}/src/analysis/*.cpp
+	${CMAKE_SOURCE_DIR}/src/wrappers/*.cpp
+)
+
+# Create static library with analysis and analyzer code
+add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
+set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_include_directories(${PROJECT_NAME}_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
+)
+target_link_libraries(${PROJECT_NAME}_lib PUBLIC
+	coretoolkit::coretoolkit
+	structure-identification::structure-identification
+	spdlog::spdlog
+	fmt::fmt
+	nlohmann_json::nlohmann_json
+	OpenMP::OpenMP_CXX
+)
+
+# Create executables from functions
+foreach(FUNC_SRC ${FUNCTION_SOURCES})
+	get_filename_component(FUNC_NAME ${FUNC_SRC} NAME_WE)
+	add_executable(${FUNC_NAME} ${FUNC_SRC})
+	target_include_directories(${FUNC_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+	target_link_libraries(${FUNC_NAME} PRIVATE ${PROJECT_NAME}_lib)
+	install(TARGETS ${FUNC_NAME} DESTINATION bin)
+endforeach()
+
+install(TARGETS ${PROJECT_NAME}_lib DESTINATION lib)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include)

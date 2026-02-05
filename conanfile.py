@@ -1,0 +1,47 @@
+from conan import ConanFile
+from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
+
+
+class GrainSegmentationConan(ConanFile):
+    name = "grain-segmentation"
+    version = "1.0.0"
+    package_type = "static-library"
+    license = "MIT"
+    settings = "os", "arch", "compiler", "build_type"
+    requires = (
+        "coretoolkit/1.0.0",
+        "structure-identification/1.0.0",
+        "spdlog/1.14.1",  # Logging, needs explicit linking for executables
+        "fmt/10.2.1",  # Formatting, needs explicit linking for executables
+        "nlohmann_json/3.11.3",  # Header-only, needs explicit require
+    )
+    exports_sources = "CMakeLists.txt", "include/*", "src/*"
+
+    def layout(self):
+        cmake_layout(self)
+
+    def generate(self):
+        CMakeToolchain(self).generate()
+        CMakeDeps(self).generate()
+
+    def build(self):
+        cmake = CMake(self)
+        cmake.configure()
+        cmake.build()
+
+    def package(self):
+        cmake = CMake(self)
+        cmake.install()
+
+    def package_info(self):
+        self.cpp_info.set_property(
+            "cmake_target_name", "grain-segmentation::grain-segmentation"
+        )
+        self.cpp_info.libs = ["grain-segmentation_lib"]
+        self.cpp_info.requires = [
+            "coretoolkit::coretoolkit",
+            "structure-identification::structure-identification",
+            "nlohmann_json::nlohmann_json",
+            "spdlog::spdlog",
+            "fmt::fmt",
+        ]

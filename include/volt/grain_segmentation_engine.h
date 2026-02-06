@@ -1,13 +1,13 @@
 #pragma once
 
-#include <opendxa/core/particle_property.h>
-#include <opendxa/core/simulation_cell.h>
-#include <opendxa/math/matrix3.h>
-#include <opendxa/math/quaternion.h>
-#include <opendxa/structures/crystal_structure_types.h>
-#include <opendxa/analysis/polyhedral_template_matching.h>
-#include <opendxa/analysis/nearest_neighbor_finder.h>
-#include <opendxa/analysis/ptm_neighbor_finder.h>
+#include <volt/core/particle_property.h>
+#include <volt/core/simulation_cell.h>
+#include <volt/math/matrix3.h>
+#include <volt/math/quaternion.h>
+#include <volt/structures/crystal_structure_types.h>
+#include <volt/analysis/polyhedral_template_matching.h>
+#include <volt/analysis/nearest_neighbor_finder.h>
+#include <volt/analysis/ptm_neighbor_finder.h>
 
 #include <ptm_functions.h>
 #include <boost/sort/sort.hpp>
@@ -28,7 +28,7 @@
 #include <stdexcept>
 #include <algorithm>
 
-namespace OpenDXA{
+namespace Volt{
 
 union NodeUnion{
     size_t opposite;

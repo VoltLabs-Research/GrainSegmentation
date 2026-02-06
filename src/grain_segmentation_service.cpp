@@ -1,14 +1,16 @@
-#include <opendxa/wrappers/grain_segmentation.h>
-#include <opendxa/utilities/concurrence/parallel_system.h>
+#include <volt/grain_segmentation_service.h>
+#include <volt/core/frame_adapter.h>
+#include <volt/core/analysis_result.h>
+#include <volt/utilities/concurrence/parallel_system.h>
 #include <spdlog/spdlog.h>
 #include <fstream>
 #include <map>
 
-namespace OpenDXA{
+namespace Volt{
 
-using namespace OpenDXA::Particles;
+using namespace Volt::Particles;
 
-GrainSegmentationWrapper::GrainSegmentationWrapper()
+GrainSegmentationService::GrainSegmentationService()
     : _rmsd(0.10f),
       _identificationMode(StructureAnalysis::Mode::PTM),
       _adoptOrphanAtoms(true),
@@ -16,15 +18,15 @@ GrainSegmentationWrapper::GrainSegmentationWrapper()
       _handleCoherentInterfaces(true),
       _outputBonds(false){}
 
-void GrainSegmentationWrapper::setIdentificationMode(StructureAnalysis::Mode mode){
+void GrainSegmentationService::setIdentificationMode(StructureAnalysis::Mode mode){
     _identificationMode = mode;
 }
 
-void GrainSegmentationWrapper::setRMSD(float rmsd){
+void GrainSegmentationService::setRMSD(float rmsd){
     _rmsd = rmsd;
 }
 
-void GrainSegmentationWrapper::setParameters(
+void GrainSegmentationService::setParameters(
     bool adoptOrphanAtoms,
     int minGrainAtomCount,
     bool handleCoherentInterfaces,
@@ -36,41 +38,14 @@ void GrainSegmentationWrapper::setParameters(
     _outputBonds = outputBonds;
 }
 
-std::shared_ptr<ParticleProperty> GrainSegmentationWrapper::createPositionProperty(const LammpsParser::Frame &frame){
-    std::shared_ptr<ParticleProperty> property(new ParticleProperty(frame.natoms, ParticleProperty::PositionProperty, 0, true));
-
-    if(!property || property->size() != frame.natoms){
-        spdlog::error("Failed to allocate ParticleProperty for positions with correct size");
-        return nullptr;
-    }
-
-    Point3* data = property->dataPoint3();
-    if(!data){
-        spdlog::error("Failed to get position data pointer from ParticleProperty");
-        return nullptr;
-    }
-
-    for(size_t i = 0; i < frame.positions.size() && i < static_cast<size_t>(frame.natoms); i++){
-        data[i] = frame.positions[i];
-    }
-
-    return property;
-}
-
-json GrainSegmentationWrapper::compute(const LammpsParser::Frame &frame, const std::string &outputFilename){
-    json result;
-    
+json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const std::string &outputFilename){
     if(frame.natoms <= 0){
-        result["is_failed"] = true;
-        result["error"] = "Invalid number of atoms";
-        return result;
+        return AnalysisResult::failure("Invalid number of atoms");
     }
 
-    auto positions = createPositionProperty(frame);
+    auto positions = FrameAdapter::createPositionProperty(frame);
     if(!positions){
-        result["is_failed"] = true;
-        result["error"] = "Failed to create position property";
-        return result;
+        return AnalysisResult::failure("Failed to create position property");
     }
 
     // Default preferred orientations (Identity)
@@ -108,20 +83,17 @@ json GrainSegmentationWrapper::compute(const LammpsParser::Frame &frame, const s
 
     if(!outputFilename.empty()){
         if(_identificationMode == StructureAnalysis::Mode::PTM){
-            // TODO: PTM data export requires DXAJsonExporter from main OpenDXA package
+            // TODO: PTM data export requires DXAJsonExporter from main Volt package
             // For standalone package, structure statistics are returned in the result
             spdlog::warn("PTM data export to file not available in standalone package");
-            result["structure_statistics"] = structureAnalysis->getStructureStatisticsJson();
         }
-        result = performGrainSegmentation(frame, *structureAnalysis, extractedStructureTypes, outputFilename);
-    }else{
-        result["is_failed"] = true;
+        return performGrainSegmentation(frame, *structureAnalysis, extractedStructureTypes, outputFilename);
     }
 
-    return result;
+    return AnalysisResult::failure("No output filename specified");
 }
 
-json GrainSegmentationWrapper::performGrainSegmentation(
+json GrainSegmentationService::performGrainSegmentation(
     const LammpsParser::Frame &frame,
     const StructureAnalysis &structureAnalysis,
     const std::vector<int>& structureTypes,
@@ -130,15 +102,12 @@ json GrainSegmentationWrapper::performGrainSegmentation(
     spdlog::info("Starting grain segmentation analysis...");
     std::string msgpackPath = outputFile + "_grains.msgpack";
     std::string metaPath = outputFile + "_grains_meta.msgpack";
-    json result;
 
     try{
         const auto& ctx = structureAnalysis.context();
         if(!ctx.ptmOrientation || !ctx.correspondencesCode){
             spdlog::error("PTM orientation data not available. Grain segmentation requires PTM mode.");
-            result["is_failed"] = true;
-            result["error"] = "Grain segmentation requires PTM mode with orientation output enabled.";
-            return result; 
+            return AnalysisResult::failure("Grain segmentation requires PTM mode with orientation output enabled.");
         }
 
         // Create shared pointers for the engine
@@ -203,10 +172,10 @@ json GrainSegmentationWrapper::performGrainSegmentation(
             grainIds[i] = atomClusters->getInt(i);
         }
 
-        json grainData;
-        grainData["grain_count"] = static_cast<int>(engine2.grainCount());
-        grainData["merging_threshold"] = engine1->suggestedMergingThreshold();
-        grainData["grains"] = json::array();
+        auto result = AnalysisResult::success();
+        result["grain_count"] = static_cast<int>(engine2.grainCount());
+        result["merging_threshold"] = engine1->suggestedMergingThreshold();
+        result["grains"] = json::array();
 
         for(const auto &grain : engine2.grains()){
             json grainInfo;
@@ -218,7 +187,7 @@ json GrainSegmentationWrapper::performGrainSegmentation(
                 grain.orientation.z(), 
                 grain.orientation.w()
             };
-            grainData["grains"].push_back(grainInfo);
+            result["grains"].push_back(grainInfo);
         }
 
         try{
@@ -263,7 +232,7 @@ json GrainSegmentationWrapper::performGrainSegmentation(
         // Write grain metadata to JSON file
         std::ofstream metaFile(metaPath + ".json");
         if(metaFile.is_open()){
-            metaFile << grainData.dump(2);
+            metaFile << result.dump(2);
             metaFile.close();
             spdlog::info("Exported grain metadata to: {}.json", metaPath);
         }else{
@@ -271,15 +240,11 @@ json GrainSegmentationWrapper::performGrainSegmentation(
         }
 
         spdlog::info("Exported grain metadata msgpack to: {}", metaPath);
-
-        result = grainData;
-        result["is_failed"] = false;
+        return result;
     }catch(const std::exception& e){
-        result["is_failed"] = true;
-        result["error"] = std::string("Grain segmentation failed: ") + e.what();
         spdlog::error("Grain segmentation error: {}", e.what());
+        return AnalysisResult::failure(std::string("Grain segmentation failed: ") + e.what());
     }
-    return result;
 }
 
 }

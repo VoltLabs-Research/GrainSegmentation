@@ -39,19 +39,13 @@ find_package(fmt REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenMP REQUIRED)
 
-file(GLOB FUNCTION_SOURCES ${CMAKE_SOURCE_DIR}/src/functions/*.cpp)
-file(GLOB_RECURSE LIB_SOURCES CONFIGURE_DEPENDS
-	${CMAKE_SOURCE_DIR}/src/analysis/*.cpp
-	${CMAKE_SOURCE_DIR}/src/wrappers/*.cpp
-)
+# Collect all library sources (exclude main.cpp)
+file(GLOB LIB_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
+list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 
-# Create static library with analysis and analyzer code
+# Create static library with algorithm implementation
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
-set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
 target_include_directories(${PROJECT_NAME}_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
-target_compile_definitions(${PROJECT_NAME}_lib PUBLIC
-)
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
 	coretoolkit::coretoolkit
 	structure-identification::structure-identification
@@ -60,15 +54,21 @@ target_link_libraries(${PROJECT_NAME}_lib PUBLIC
 	nlohmann_json::nlohmann_json
 	OpenMP::OpenMP_CXX
 )
+set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-# Create executables from functions
-foreach(FUNC_SRC ${FUNCTION_SOURCES})
-	get_filename_component(FUNC_NAME ${FUNC_SRC} NAME_WE)
-	add_executable(${FUNC_NAME} ${FUNC_SRC})
-	target_include_directories(${FUNC_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
-	target_link_libraries(${FUNC_NAME} PRIVATE ${PROJECT_NAME}_lib)
-	install(TARGETS ${FUNC_NAME} DESTINATION bin)
-endforeach()
+# Create executable
+add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(${PROJECT_NAME} PRIVATE
+	${PROJECT_NAME}_lib
+	coretoolkit::coretoolkit
+	structure-identification::structure-identification
+	spdlog::spdlog
+	fmt::fmt
+	nlohmann_json::nlohmann_json
+	OpenMP::OpenMP_CXX
+)
 
+install(TARGETS ${PROJECT_NAME} DESTINATION bin)
 install(TARGETS ${PROJECT_NAME}_lib DESTINATION lib)
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/ DESTINATION include)

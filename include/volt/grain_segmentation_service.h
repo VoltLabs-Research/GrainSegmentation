@@ -1,21 +1,21 @@
 #pragma once
 
-#include <opendxa/core/opendxa.h>
-#include <opendxa/core/lammps_parser.h>
+#include <volt/core/volt.h>
+#include <volt/core/lammps_parser.h>
 #include <nlohmann/json.hpp>
-#include <opendxa/core/particle_property.h>
-#include <opendxa/structures/crystal_structure_types.h>
-#include <opendxa/analysis/structure_analysis.h>
-#include <opendxa/analysis/analysis_context.h>
-#include <opendxa/analysis/grain_segmentation.h>
+#include <volt/core/particle_property.h>
+#include <volt/structures/crystal_structure_types.h>
+#include <volt/analysis/structure_analysis.h>
+#include <volt/analysis/analysis_context.h>
+#include <volt/grain_segmentation_engine.h>
 #include <string>
 
-namespace OpenDXA{
+namespace Volt{
 using json = nlohmann::json;
 
-class GrainSegmentationWrapper{
+class GrainSegmentationService{
 public:
-    GrainSegmentationWrapper();
+    GrainSegmentationService();
     
     void setIdentificationMode(StructureAnalysis::Mode mode);
     void setRMSD(float rmsd);
@@ -41,20 +41,11 @@ private:
     bool _handleCoherentInterfaces;
     bool _outputBonds;
 
-
-    std::shared_ptr<Particles::ParticleProperty> createPositionProperty(const LammpsParser::Frame &frame);
-
     json performGrainSegmentation(
         const LammpsParser::Frame &frame,
         const StructureAnalysis& structureAnalysis,
         const std::vector<int>& structureTypes,
         const std::string& outputFile
-    );
-
-    void exportGrainModelAsGLB(
-        const LammpsParser::Frame &frame,
-        const std::vector<int>& grainIds,
-        const std::string& outputPath
     );
 };
 

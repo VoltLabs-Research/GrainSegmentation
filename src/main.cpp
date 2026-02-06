@@ -1,11 +1,11 @@
-#include <opendxa/cli/common.h>
-#include <opendxa/wrappers/grain_segmentation.h>
+#include <volt/cli/common.h>
+#include <volt/grain_segmentation_service.h>
 
-using namespace OpenDXA;
-using namespace OpenDXA::CLI;
+using namespace Volt;
+using namespace Volt::CLI;
 
 void showUsage(const std::string& name) {
-    printUsageHeader(name, "OpenDXA - Grain Segmentation");
+    printUsageHeader(name, "Volt - Grain Segmentation");
     std::cerr
         << "  --rmsd <float>                        RMSD threshold for PTM. [default: 0.1]\n"
         << "  --minGrainAtomCount <int>             Minimum atoms per grain. [default: 100]\n"
@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     spdlog::info("  - handleCoherentInterfaces: {}", handleCoherentInterfaces);
     spdlog::info("  - outputBonds: {}", outputBonds);
     
-    GrainSegmentationWrapper analyzer;
+    GrainSegmentationService analyzer;
     analyzer.setIdentificationMode(StructureAnalysis::Mode::PTM);
     analyzer.setRMSD(getDouble(opts, "--rmsd", 0.1f));
     analyzer.setParameters(

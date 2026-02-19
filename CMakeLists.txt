@@ -37,7 +37,6 @@ find_package(structure-identification REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(fmt REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(OpenMP REQUIRED)
 
 # Collect all library sources (exclude main.cpp)
 file(GLOB LIB_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -53,7 +52,6 @@ target_link_libraries(${PROJECT_NAME}_lib PUBLIC
 	spdlog::spdlog
 	fmt::fmt
 	nlohmann_json::nlohmann_json
-	OpenMP::OpenMP_CXX
 )
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
@@ -68,7 +66,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 	spdlog::spdlog
 	fmt::fmt
 	nlohmann_json::nlohmann_json
-	OpenMP::OpenMP_CXX
 )
 
 install(TARGETS ${PROJECT_NAME} DESTINATION bin)

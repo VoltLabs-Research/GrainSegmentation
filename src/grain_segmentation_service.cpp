@@ -2,8 +2,8 @@
 #include <volt/core/frame_adapter.h>
 #include <volt/core/analysis_result.h>
 #include <volt/utilities/concurrence/parallel_system.h>
+#include <volt/utilities/json_utils.h>
 #include <spdlog/spdlog.h>
-#include <fstream>
 #include <map>
 
 namespace Volt{
@@ -190,53 +190,41 @@ json GrainSegmentationService::performGrainSegmentation(
             result["grains"].push_back(grainInfo);
         }
 
-        try{
-            std::map<int, json> grainGroups;
-            for(size_t i = 0; i < static_cast<size_t>(frame.natoms); i++){
-                int gid = grainIds[i];
-                json atomData;
-                atomData["id"] = i;
-                if(i < frame.positions.size()){
-                    const auto &p = frame.positions[i];
-                    atomData["pos"] = {p.x(), p.y(), p.z()};
-                }else{
-                    atomData["pos"] = {0.0, 0.0, 0.0};
-                }
-
-                if(grainGroups.find(gid) == grainGroups.end()){
-                    grainGroups[gid] = json::array();
-                }
-
-                grainGroups[gid].push_back(atomData);
-            }
-
-            json finalOutput;
-            for(auto &[gid, atoms] : grainGroups){
-                std::string key = (gid == 0) ? "Unassigned" : ("Grain_" + std::to_string(gid));
-                finalOutput[key] = atoms;
-            }
-
-            // Write grain atoms to JSON file
-            std::ofstream atomsFile(msgpackPath + ".json");
-            if(atomsFile.is_open()){
-                atomsFile << finalOutput.dump(2);
-                atomsFile.close();
-                spdlog::info("Exported grain atoms to: {}.json", msgpackPath);
+        std::map<int, json> grainGroups;
+        for(size_t i = 0; i < static_cast<size_t>(frame.natoms); i++){
+            int gid = grainIds[i];
+            json atomData;
+            atomData["id"] = i;
+            if(i < frame.positions.size()){
+                const auto &p = frame.positions[i];
+                atomData["pos"] = {p.x(), p.y(), p.z()};
             }else{
-                spdlog::warn("Could not write grain atoms file: {}.json", msgpackPath);
+                atomData["pos"] = {0.0, 0.0, 0.0};
             }
-        }catch(...){
-            spdlog::error("Failed to export grains data");
+
+            if(grainGroups.find(gid) == grainGroups.end()){
+                grainGroups[gid] = json::array();
+            }
+
+            grainGroups[gid].push_back(atomData);
         }
 
-        // Write grain metadata to JSON file
-        std::ofstream metaFile(metaPath + ".json");
-        if(metaFile.is_open()){
-            metaFile << result.dump(2);
-            metaFile.close();
-            spdlog::info("Exported grain metadata to: {}.json", metaPath);
+        json finalOutput;
+        for(auto &[gid, atoms] : grainGroups){
+            std::string key = (gid == 0) ? "Unassigned" : ("Grain_" + std::to_string(gid));
+            finalOutput[key] = atoms;
+        }
+
+        if(JsonUtils::writeJsonMsgpackToFile(finalOutput, msgpackPath, false)){
+            spdlog::info("Exported grain atoms to: {}", msgpackPath);
         }else{
-            spdlog::warn("Could not write grain metadata file: {}.json", metaPath);
+            spdlog::warn("Could not write grain atoms msgpack file: {}", msgpackPath);
+        }
+
+        if(JsonUtils::writeJsonMsgpackToFile(result, metaPath, false)){
+            spdlog::info("Exported grain metadata to: {}", metaPath);
+        }else{
+            spdlog::warn("Could not write grain metadata msgpack file: {}", metaPath);
         }
 
         spdlog::info("Exported grain metadata msgpack to: {}", metaPath);

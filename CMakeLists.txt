@@ -35,7 +35,6 @@ set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel Re
 find_package(coretoolkit REQUIRED)
 find_package(structure-identification REQUIRED)
 find_package(spdlog REQUIRED)
-find_package(fmt REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
 # Collect all library sources (exclude main.cpp)
@@ -50,7 +49,6 @@ target_link_libraries(${PROJECT_NAME}_lib PUBLIC
 	coretoolkit::coretoolkit
 	structure-identification::structure-identification
 	spdlog::spdlog
-	fmt::fmt
 	nlohmann_json::nlohmann_json
 )
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -64,7 +62,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 	coretoolkit::coretoolkit
 	structure-identification::structure-identification
 	spdlog::spdlog
-	fmt::fmt
 	nlohmann_json::nlohmann_json
 )
 

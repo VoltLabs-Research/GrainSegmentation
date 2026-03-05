@@ -39,16 +39,13 @@ void GrainSegmentationService::setParameters(
 }
 
 json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const std::string &outputFilename){
-    if(frame.natoms <= 0){
+    if(frame.natoms <= 0)
         return AnalysisResult::failure("Invalid number of atoms");
-    }
 
     auto positions = FrameAdapter::createPositionPropertyShared(frame);
-    if(!positions){
+    if(!positions)
         return AnalysisResult::failure("Failed to create position property");
-    }
 
-    // Default preferred orientations (Identity)
     std::vector<Matrix3> preferredOrientations;
     preferredOrientations.push_back(Matrix3::Identity());
 
@@ -56,7 +53,6 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
     AnalysisContext context(
         positions.get(),
         frame.simulationCell,
-        // Placeholder
         LATTICE_BCC,
         nullptr,
         structuretypes.get(),
@@ -83,8 +79,6 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
 
     if(!outputFilename.empty()){
         if(_identificationMode == StructureAnalysis::Mode::PTM){
-            // TODO: PTM data export requires DXAJsonExporter from main Volt package
-            // For standalone package, structure statistics are returned in the result
             spdlog::warn("PTM data export to file not available in standalone package");
         }
         return performGrainSegmentation(frame, *structureAnalysis, extractedStructureTypes, outputFilename);
@@ -100,8 +94,6 @@ json GrainSegmentationService::performGrainSegmentation(
     const std::string &outputFile
 ){
     spdlog::info("Starting grain segmentation analysis...");
-    std::string msgpackPath = outputFile + "_grains.msgpack";
-    std::string metaPath = outputFile + "_grains_meta.msgpack";
 
     try{
         const auto& ctx = structureAnalysis.context();
@@ -110,7 +102,6 @@ json GrainSegmentationService::performGrainSegmentation(
             return AnalysisResult::failure("Grain segmentation requires PTM mode with orientation output enabled.");
         }
 
-        // Create shared pointers for the engine
         auto positions = std::make_shared<ParticleProperty>(frame.natoms, ParticleProperty::PositionProperty, 0, true);
         for(size_t i = 0; i < frame.positions.size() && i < static_cast<size_t>(frame.natoms); i++){
             positions->setPoint3(i, frame.positions[i]);
@@ -121,25 +112,21 @@ json GrainSegmentationService::performGrainSegmentation(
             structures->setInt(i, structureTypes[i]);
         }
 
-        // PTM orientation property (quaternions: x, y, z, w)
-        auto orientations = std::make_shared<ParticleProperty>(
-            frame.natoms, DataType::Double, 4, 0, false);
+        auto orientations = std::make_shared<ParticleProperty>(frame.natoms, DataType::Double, 4, 0, false);
         for(size_t i = 0; i < static_cast<size_t>(frame.natoms); i++){
             for(int c = 0; c < 4; c++){
                 orientations->setDoubleComponent(i, c, ctx.ptmOrientation->getDoubleComponent(i, c));
             }
         }
 
-        // Copy correspondences codes
-        auto correspondences = std::make_shared<ParticleProperty>(
-            frame.natoms, DataType::Int64, 1, 0, false);
+        auto correspondences = std::make_shared<ParticleProperty>(frame.natoms, DataType::Int64, 1, 0, false);
         {
             auto* src = reinterpret_cast<const uint64_t*>(ctx.correspondencesCode->data());
             auto* dst = reinterpret_cast<uint64_t*>(correspondences->data());
             std::copy(src, src + frame.natoms, dst);
         }
 
-        spdlog::info("Running GrainSegmentationEngine1 (building neighbor graph and dendrogram)...");
+        spdlog::info("Running GrainSegmentationEngine1...");
         auto engine1 = std::make_shared<GrainSegmentationEngine1>(
             positions,
             structures,
@@ -151,10 +138,9 @@ json GrainSegmentationService::performGrainSegmentation(
         );
 
         engine1->perform();
-        
-        spdlog::info("GrainSegmentationEngine1 complete. Dendrogram size: {}", engine1->dendrogram().size());
-        spdlog::info("Suggested merging threshold: {:.4f}", engine1->suggestedMergingThreshold());
-        spdlog::info("Running GrainSegmentationEngine2 (clustering atoms into grains)...");
+
+        spdlog::info("GrainSegmentationEngine1 complete. Suggested merging threshold: {:.4f}", engine1->suggestedMergingThreshold());
+        spdlog::info("Running GrainSegmentationEngine2...");
 
         GrainSegmentationEngine2 engine2(
             engine1,
@@ -172,62 +158,55 @@ json GrainSegmentationService::performGrainSegmentation(
             grainIds[i] = atomClusters->getInt(i);
         }
 
-        auto result = AnalysisResult::success();
-        result["grain_count"] = static_cast<int>(engine2.grainCount());
-        result["merging_threshold"] = engine1->suggestedMergingThreshold();
-        result["grains"] = json::array();
+        // Build grain center-of-mass map
+        std::map<int, Point3> grainCenters;
+        std::map<int, int> grainAtomCount;
+        for(int i = 0; i < frame.natoms; i++){
+            int gid = grainIds[i];
+            if(i < static_cast<int>(frame.positions.size())){
+                const auto& p = frame.positions[i];
+                grainCenters[gid] = grainCenters[gid] + Vector3(p.x(), p.y(), p.z());
+                grainAtomCount[gid]++;
+            }
+        }
 
+        // Build grains sub_listing
+        json grainsArray = json::array();
         for(const auto &grain : engine2.grains()){
             json grainInfo;
             grainInfo["id"] = grain.id;
             grainInfo["size"] = grain.size;
             grainInfo["orientation"] = {
-                grain.orientation.x(), 
-                grain.orientation.y(), 
-                grain.orientation.z(), 
+                grain.orientation.x(),
+                grain.orientation.y(),
+                grain.orientation.z(),
                 grain.orientation.w()
             };
-            result["grains"].push_back(grainInfo);
-        }
-
-        std::map<int, json> grainGroups;
-        for(size_t i = 0; i < static_cast<size_t>(frame.natoms); i++){
-            int gid = grainIds[i];
-            json atomData;
-            atomData["id"] = i;
-            if(i < frame.positions.size()){
-                const auto &p = frame.positions[i];
-                atomData["pos"] = {p.x(), p.y(), p.z()};
-            }else{
-                atomData["pos"] = {0.0, 0.0, 0.0};
+            // Center of mass
+            if(grainAtomCount.count(grain.id) && grainAtomCount[grain.id] > 0){
+                int cnt = grainAtomCount[grain.id];
+                const auto& c = grainCenters[grain.id];
+                grainInfo["pos"] = { c.x() / cnt, c.y() / cnt, c.z() / cnt };
+            } else {
+                grainInfo["pos"] = {0.0, 0.0, 0.0};
             }
-
-            if(grainGroups.find(gid) == grainGroups.end()){
-                grainGroups[gid] = json::array();
-            }
-
-            grainGroups[gid].push_back(atomData);
+            grainsArray.push_back(grainInfo);
         }
 
-        json finalOutput;
-        for(auto &[gid, atoms] : grainGroups){
-            std::string key = (gid == 0) ? "Unassigned" : ("Grain_" + std::to_string(gid));
-            finalOutput[key] = atoms;
-        }
+        json result;
+        result["main_listing"] = {
+            { "total_grains", static_cast<int>(engine2.grainCount()) },
+            { "merging_threshold", engine1->suggestedMergingThreshold() }
+        };
+        result["sub_listings"] = { { "grains", grainsArray } };
 
-        if(JsonUtils::writeJsonMsgpackToFile(finalOutput, msgpackPath, false)){
-            spdlog::info("Exported grain atoms to: {}", msgpackPath);
+        const std::string msgpackPath = outputFile + "_grains.msgpack";
+        if(JsonUtils::writeJsonMsgpackToFile(result, msgpackPath, false)){
+            spdlog::info("Exported grain data to: {}", msgpackPath);
         }else{
-            spdlog::warn("Could not write grain atoms msgpack file: {}", msgpackPath);
+            spdlog::warn("Could not write grains msgpack: {}", msgpackPath);
         }
 
-        if(JsonUtils::writeJsonMsgpackToFile(result, metaPath, false)){
-            spdlog::info("Exported grain metadata to: {}", metaPath);
-        }else{
-            spdlog::warn("Could not write grain metadata msgpack file: {}", metaPath);
-        }
-
-        spdlog::info("Exported grain metadata msgpack to: {}", metaPath);
         return result;
     }catch(const std::exception& e){
         spdlog::error("Grain segmentation error: {}", e.what());
@@ -236,3 +215,4 @@ json GrainSegmentationService::performGrainSegmentation(
 }
 
 }
+

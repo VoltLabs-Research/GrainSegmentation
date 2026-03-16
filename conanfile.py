@@ -8,7 +8,12 @@ class GrainSegmentationConan(ConanFile):
     package_type = "static-library"
     license = "MIT"
     settings = "os", "arch", "compiler", "build_type"
+    default_options = {
+        "hwloc/*:shared": True,
+    }
     requires = (
+        "boost/1.88.0",
+        "onetbb/2021.12.0",
         "coretoolkit/1.0.0",
         "structure-identification/1.0.0",
         "spdlog/1.14.1",
@@ -38,6 +43,8 @@ class GrainSegmentationConan(ConanFile):
         )
         self.cpp_info.libs = ["grain-segmentation_lib"]
         self.cpp_info.requires = [
+            "boost::headers",
+            "onetbb::onetbb",
             "coretoolkit::coretoolkit",
             "structure-identification::structure-identification",
             "nlohmann_json::nlohmann_json",

@@ -5,6 +5,7 @@
 #include <volt/utilities/json_utils.h>
 #include <spdlog/spdlog.h>
 #include <map>
+#include <algorithm>
 
 namespace Volt{
 
@@ -205,6 +206,53 @@ json GrainSegmentationService::performGrainSegmentation(
             spdlog::info("Exported grain data to: {}", msgpackPath);
         }else{
             spdlog::warn("Could not write grains msgpack: {}", msgpackPath);
+        }
+
+        // --- atoms.msgpack export (Structure Identification exposure) ---
+        {
+            constexpr int K = static_cast<int>(StructureType::NUM_STRUCTURE_TYPES);
+            std::vector<std::string> names(K);
+            for(int st = 0; st < K; st++)
+                names[st] = structureAnalysis.getStructureTypeName(st);
+
+            std::vector<std::vector<size_t>> structureAtomIndices(K);
+            for(size_t i = 0; i < static_cast<size_t>(frame.natoms); ++i){
+                const int raw = structureTypes[i];
+                const int st = (0 <= raw && raw < K) ? raw : 0;
+                structureAtomIndices[static_cast<size_t>(st)].push_back(i);
+            }
+
+            std::vector<int> structureOrder;
+            structureOrder.reserve(K);
+            for(int st = 0; st < K; st++){
+                if(!structureAtomIndices[static_cast<size_t>(st)].empty())
+                    structureOrder.push_back(st);
+            }
+            std::sort(structureOrder.begin(), structureOrder.end(),
+                [&](int a, int b){ return names[a] < names[b]; });
+
+            json atomsByStructure;
+            for(int st : structureOrder){
+                json atomsArray = json::array();
+                for(size_t atomIndex : structureAtomIndices[static_cast<size_t>(st)]){
+                    const Point3& pos = frame.positions[atomIndex];
+                    atomsArray.push_back({
+                        {"id", frame.ids[atomIndex]},
+                        {"pos", {pos.x(), pos.y(), pos.z()}}
+                    });
+                }
+                atomsByStructure[names[st]] = atomsArray;
+            }
+
+            json exportWrapper;
+            exportWrapper["export"] = json::object();
+            exportWrapper["export"]["AtomisticExporter"] = atomsByStructure;
+            const std::string atomsPath = outputFile + "_atoms.msgpack";
+            if(JsonUtils::writeJsonMsgpackToFile(exportWrapper, atomsPath, false)){
+                spdlog::info("Exported atoms data to: {}", atomsPath);
+            }else{
+                spdlog::warn("Could not write atoms msgpack: {}", atomsPath);
+            }
         }
 
         return result;

@@ -5,9 +5,9 @@
 #include <volt/math/matrix3.h>
 #include <volt/math/quaternion.h>
 #include <volt/structures/crystal_structure_types.h>
-#include <volt/analysis/polyhedral_template_matching.h>
+#include <volt/polyhedral_template_matching.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
-#include <volt/analysis/ptm_neighbor_finder.h>
+#include <volt/ptm_neighbor_finder.h>
 
 #include <ptm_functions.h>
 #include <boost/sort/sort.hpp>

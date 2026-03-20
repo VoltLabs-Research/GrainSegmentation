@@ -34,6 +34,7 @@ set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel Re
 
 find_package(coretoolkit REQUIRED)
 find_package(structure-identification REQUIRED)
+find_package(polyhedral-template-matching REQUIRED)
 find_package(TBB REQUIRED)
 find_package(Boost REQUIRED)
 find_package(spdlog REQUIRED)
@@ -58,17 +59,36 @@ list(FILTER LIB_SOURCES EXCLUDE REGEX ".*main\\.cpp$")
 
 # Create static library with algorithm implementation
 add_library(${PROJECT_NAME}_lib STATIC ${LIB_SOURCES})
-target_include_directories(${PROJECT_NAME}_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
+set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+get_target_property(STRUCTURE_IDENTIFICATION_INCLUDE_DIRS structure-identification::structure-identification INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(POLYHEDRAL_TEMPLATE_MATCHING_INCLUDE_DIRS polyhedral-template-matching::polyhedral-template-matching INTERFACE_INCLUDE_DIRECTORIES)
+
+set(LOCAL_STRUCTURE_IDENTIFICATION_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../StructureIdentification/include")
+set(LOCAL_POLYHEDRAL_TEMPLATE_MATCHING_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/../PolyhedralTemplateMatching/include")
+
+if(EXISTS "${LOCAL_STRUCTURE_IDENTIFICATION_INCLUDE_DIR}")
+	list(PREPEND STRUCTURE_IDENTIFICATION_INCLUDE_DIRS "${LOCAL_STRUCTURE_IDENTIFICATION_INCLUDE_DIR}")
+endif()
+if(EXISTS "${LOCAL_POLYHEDRAL_TEMPLATE_MATCHING_INCLUDE_DIR}")
+	list(PREPEND POLYHEDRAL_TEMPLATE_MATCHING_INCLUDE_DIRS "${LOCAL_POLYHEDRAL_TEMPLATE_MATCHING_INCLUDE_DIR}")
+endif()
+
+target_include_directories(${PROJECT_NAME}_lib BEFORE PUBLIC
+	${STRUCTURE_IDENTIFICATION_INCLUDE_DIRS}
+	${POLYHEDRAL_TEMPLATE_MATCHING_INCLUDE_DIRS}
+	${CMAKE_SOURCE_DIR}/include
+)
 target_precompile_headers(${PROJECT_NAME}_lib PRIVATE <volt/core/volt.h>)
 target_link_libraries(${PROJECT_NAME}_lib PUBLIC
 	${GRAIN_SEGMENTATION_BOOST_TARGET}
 	TBB::tbb
-	coretoolkit::coretoolkit
 	structure-identification::structure-identification
+	polyhedral-template-matching::polyhedral-template-matching
+	coretoolkit::coretoolkit
 	spdlog::spdlog
 	nlohmann_json::nlohmann_json
 )
-set_target_properties(${PROJECT_NAME}_lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Create executable
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)

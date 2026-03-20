@@ -16,8 +16,7 @@ using json = nlohmann::json;
 class GrainSegmentationService{
 public:
     GrainSegmentationService();
-    
-    void setIdentificationMode(StructureAnalysis::Mode mode);
+
     void setRMSD(float rmsd);
 
     void setParameters(
@@ -34,7 +33,6 @@ public:
 
 private:
     float _rmsd;
-    StructureAnalysis::Mode _identificationMode;
 
     bool _adoptOrphanAtoms;
     int _minGrainAtomCount;

@@ -51,7 +51,6 @@ int main(int argc, char* argv[]) {
     spdlog::info("  - outputBonds: {}", outputBonds);
     
     GrainSegmentationService analyzer;
-    analyzer.setIdentificationMode(StructureAnalysis::Mode::PTM);
     analyzer.setRMSD(getDouble(opts, "--rmsd", 0.1f));
     analyzer.setParameters(
         adoptOrphanAtoms,

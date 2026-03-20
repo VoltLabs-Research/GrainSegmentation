@@ -13,15 +13,10 @@ using namespace Volt::Particles;
 
 GrainSegmentationService::GrainSegmentationService()
     : _rmsd(0.10f),
-      _identificationMode(StructureAnalysis::Mode::PTM),
       _adoptOrphanAtoms(true),
       _minGrainAtomCount(100),
       _handleCoherentInterfaces(true),
       _outputBonds(false){}
-
-void GrainSegmentationService::setIdentificationMode(StructureAnalysis::Mode mode){
-    _identificationMode = mode;
-}
 
 void GrainSegmentationService::setRMSD(float rmsd){
     _rmsd = rmsd;
@@ -63,13 +58,14 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
     auto structureAnalysis = std::make_unique<StructureAnalysis>(
         context,
         false,
-        _identificationMode,
+        StructureAnalysis::Mode::PTM,
         _rmsd
     );
 
     {
         PROFILE("Identify Structures");
-        structureAnalysis->identifyStructures();
+        structureAnalysis->determineLocalStructuresWithPTM();
+        structureAnalysis->computeMaximumNeighborDistanceFromPTM();
     }
 
     std::vector<int> extractedStructureTypes;
@@ -79,9 +75,7 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
     }
 
     if(!outputFilename.empty()){
-        if(_identificationMode == StructureAnalysis::Mode::PTM){
-            spdlog::warn("PTM data export to file not available in standalone package");
-        }
+        spdlog::warn("PTM data export to file not available in standalone package");
         return performGrainSegmentation(frame, *structureAnalysis, extractedStructureTypes, outputFilename);
     }
 
@@ -263,4 +257,3 @@ json GrainSegmentationService::performGrainSegmentation(
 }
 
 }
-

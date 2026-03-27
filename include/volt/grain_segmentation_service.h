@@ -41,8 +41,8 @@ private:
 
     json performGrainSegmentation(
         const LammpsParser::Frame &frame,
-        const StructureAnalysis& structureAnalysis,
         const std::vector<int>& structureTypes,
+        const PTMComputationData& ptmData,
         const std::string& outputFile
     );
 };

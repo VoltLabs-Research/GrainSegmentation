@@ -32,6 +32,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type")
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release MinSizeRel RelWithDebInfo)
 
+set(VOLTLABS_ROOT "${CMAKE_SOURCE_DIR}/.." CACHE PATH "Path to the local VoltLabs workspace")
+set(CORETOOLKIT_SOURCE_DIR "${VOLTLABS_ROOT}/CoreToolkit" CACHE PATH "Local CoreToolkit source directory")
+set(STRUCTURE_IDENTIFICATION_SOURCE_DIR "${VOLTLABS_ROOT}/StructureIdentification" CACHE PATH "Local StructureIdentification source directory")
+set(POLYHEDRAL_TEMPLATE_MATCHING_SOURCE_DIR "${VOLTLABS_ROOT}/PolyhedralTemplateMatching" CACHE PATH "Local PolyhedralTemplateMatching source directory")
+set(CORETOOLKIT_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/_deps/install/coretoolkit" CACHE PATH "Install prefix for local CoreToolkit bootstrap")
+set(STRUCTURE_IDENTIFICATION_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/_deps/install/structure-identification" CACHE PATH "Install prefix for local StructureIdentification bootstrap")
+set(POLYHEDRAL_TEMPLATE_MATCHING_INSTALL_PREFIX "${CMAKE_BINARY_DIR}/_deps/install/polyhedral-template-matching" CACHE PATH "Install prefix for local PolyhedralTemplateMatching bootstrap")
+
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+
 find_package(coretoolkit REQUIRED)
 find_package(structure-identification REQUIRED)
 find_package(polyhedral-template-matching REQUIRED)

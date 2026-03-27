@@ -1,15 +1,52 @@
 #include <volt/grain_segmentation_service.h>
 #include <volt/core/frame_adapter.h>
 #include <volt/core/analysis_result.h>
-#include <volt/utilities/concurrence/parallel_system.h>
 #include <volt/utilities/json_utils.h>
 #include <spdlog/spdlog.h>
 #include <map>
 #include <algorithm>
+#include <utility>
 
 namespace Volt{
 
 using namespace Volt::Particles;
+
+namespace{
+
+std::string structureTypeNameForExport(int structureType){
+    switch(static_cast<StructureType>(structureType)){
+        case StructureType::SC:
+            return "SC";
+        case StructureType::FCC:
+            return "FCC";
+        case StructureType::HCP:
+            return "HCP";
+        case StructureType::BCC:
+            return "BCC";
+        case StructureType::CUBIC_DIAMOND:
+            return "CUBIC_DIAMOND";
+        case StructureType::HEX_DIAMOND:
+            return "HEX_DIAMOND";
+        case StructureType::ICO:
+            return "ICO";
+        case StructureType::GRAPHENE:
+            return "GRAPHENE";
+        case StructureType::CUBIC_DIAMOND_FIRST_NEIGH:
+            return "CUBIC_DIAMOND_FIRST_NEIGH";
+        case StructureType::CUBIC_DIAMOND_SECOND_NEIGH:
+            return "CUBIC_DIAMOND_SECOND_NEIGH";
+        case StructureType::HEX_DIAMOND_FIRST_NEIGH:
+            return "HEX_DIAMOND_FIRST_NEIGH";
+        case StructureType::HEX_DIAMOND_SECOND_NEIGH:
+            return "HEX_DIAMOND_SECOND_NEIGH";
+        case StructureType::OTHER:
+        case StructureType::NUM_STRUCTURE_TYPES:
+        default:
+            return "OTHER";
+    }
+}
+
+}
 
 GrainSegmentationService::GrainSegmentationService()
     : _rmsd(0.10f),
@@ -35,12 +72,12 @@ void GrainSegmentationService::setParameters(
 }
 
 json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const std::string &outputFilename){
-    if(frame.natoms <= 0)
-        return AnalysisResult::failure("Invalid number of atoms");
+    FrameAdapter::PreparedAnalysisInput prepared;
+    std::string frameError;
+    if(!FrameAdapter::prepareAnalysisInput(frame, prepared, &frameError))
+        return AnalysisResult::failure(frameError);
 
-    auto positions = FrameAdapter::createPositionPropertyShared(frame);
-    if(!positions)
-        return AnalysisResult::failure("Failed to create position property");
+    auto positions = std::move(prepared.positions);
 
     std::vector<Matrix3> preferredOrientations;
     preferredOrientations.push_back(Matrix3::Identity());
@@ -55,18 +92,11 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
         std::move(preferredOrientations)
     );
 
-    auto structureAnalysis = std::make_unique<StructureAnalysis>(
-        context,
-        false,
-        StructureAnalysis::Mode::PTM,
-        _rmsd
-    );
+    auto structureAnalysis = std::make_unique<StructureAnalysis>(context);
+    PTMComputationData ptmData;
 
-    {
-        PROFILE("Identify Structures");
-        structureAnalysis->determineLocalStructuresWithPTM();
-        structureAnalysis->computeMaximumNeighborDistanceFromPTM();
-    }
+    ptmData = structureAnalysis->determineLocalStructuresWithPTM(_rmsd);
+    structureAnalysis->computeMaximumNeighborDistanceFromPTM();
 
     std::vector<int> extractedStructureTypes;
     extractedStructureTypes.reserve(frame.natoms);
@@ -75,8 +105,8 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
     }
 
     if(!outputFilename.empty()){
-        spdlog::warn("PTM data export to file not available in standalone package");
-        return performGrainSegmentation(frame, *structureAnalysis, extractedStructureTypes, outputFilename);
+        spdlog::info("Running grain segmentation with in-memory PTM data");
+        return performGrainSegmentation(frame, extractedStructureTypes, ptmData, outputFilename);
     }
 
     return AnalysisResult::failure("No output filename specified");
@@ -84,15 +114,14 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
 
 json GrainSegmentationService::performGrainSegmentation(
     const LammpsParser::Frame &frame,
-    const StructureAnalysis &structureAnalysis,
     const std::vector<int>& structureTypes,
+    const PTMComputationData& ptmData,
     const std::string &outputFile
 ){
     spdlog::info("Starting grain segmentation analysis...");
 
     try{
-        const auto& ctx = structureAnalysis.context();
-        if(!ctx.ptmOrientation || !ctx.correspondencesCode){
+        if(!ptmData.orientations || !ptmData.correspondences){
             spdlog::error("PTM orientation data not available. Grain segmentation requires PTM mode.");
             return AnalysisResult::failure("Grain segmentation requires PTM mode with orientation output enabled.");
         }
@@ -110,13 +139,13 @@ json GrainSegmentationService::performGrainSegmentation(
         auto orientations = std::make_shared<ParticleProperty>(frame.natoms, DataType::Double, 4, 0, false);
         for(size_t i = 0; i < static_cast<size_t>(frame.natoms); i++){
             for(int c = 0; c < 4; c++){
-                orientations->setDoubleComponent(i, c, ctx.ptmOrientation->getDoubleComponent(i, c));
+                orientations->setDoubleComponent(i, c, ptmData.orientations->getDoubleComponent(i, c));
             }
         }
 
         auto correspondences = std::make_shared<ParticleProperty>(frame.natoms, DataType::Int64, 1, 0, false);
         {
-            auto* src = reinterpret_cast<const uint64_t*>(ctx.correspondencesCode->data());
+            auto* src = reinterpret_cast<const uint64_t*>(ptmData.correspondences->data());
             auto* dst = reinterpret_cast<uint64_t*>(correspondences->data());
             std::copy(src, src + frame.natoms, dst);
         }
@@ -207,7 +236,7 @@ json GrainSegmentationService::performGrainSegmentation(
             constexpr int K = static_cast<int>(StructureType::NUM_STRUCTURE_TYPES);
             std::vector<std::string> names(K);
             for(int st = 0; st < K; st++)
-                names[st] = structureAnalysis.getStructureTypeName(st);
+                names[st] = structureTypeNameForExport(st);
 
             std::vector<std::vector<size_t>> structureAtomIndices(K);
             for(size_t i = 0; i < static_cast<size_t>(frame.natoms); ++i){

@@ -1,4 +1,5 @@
 #include <volt/grain_segmentation_service.h>
+#include <volt/analysis/ptm_structure_analysis.h>
 #include <volt/core/frame_adapter.h>
 #include <volt/core/analysis_result.h>
 #include <volt/utilities/json_utils.h>
@@ -93,10 +94,9 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
     );
 
     auto structureAnalysis = std::make_unique<StructureAnalysis>(context);
-    PTMComputationData ptmData;
-
-    ptmData = structureAnalysis->determineLocalStructuresWithPTM(_rmsd);
-    structureAnalysis->computeMaximumNeighborDistanceFromPTM();
+    auto ptmStates = std::make_shared<std::vector<PtmLocalAtomState>>();
+    determineLocalStructuresWithPTM(*structureAnalysis, _rmsd, ptmStates);
+    computeMaximumNeighborDistanceFromPTM(*structureAnalysis);
 
     std::vector<int> extractedStructureTypes;
     extractedStructureTypes.reserve(frame.natoms);
@@ -106,7 +106,7 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
 
     if(!outputFilename.empty()){
         spdlog::info("Running grain segmentation with in-memory PTM data");
-        return performGrainSegmentation(frame, extractedStructureTypes, ptmData, outputFilename);
+        return performGrainSegmentation(frame, extractedStructureTypes, *ptmStates, outputFilename);
     }
 
     return AnalysisResult::failure("No output filename specified");
@@ -115,15 +115,15 @@ json GrainSegmentationService::compute(const LammpsParser::Frame &frame, const s
 json GrainSegmentationService::performGrainSegmentation(
     const LammpsParser::Frame &frame,
     const std::vector<int>& structureTypes,
-    const PTMComputationData& ptmData,
+    const std::vector<PtmLocalAtomState>& ptmStates,
     const std::string &outputFile
 ){
     spdlog::info("Starting grain segmentation analysis...");
 
     try{
-        if(!ptmData.orientations || !ptmData.correspondences){
-            spdlog::error("PTM orientation data not available. Grain segmentation requires PTM mode.");
-            return AnalysisResult::failure("Grain segmentation requires PTM mode with orientation output enabled.");
+        if(ptmStates.size() < static_cast<size_t>(frame.natoms)){
+            spdlog::error("PTM state data not available for all atoms.");
+            return AnalysisResult::failure("Grain segmentation requires PTM orientation state for all atoms.");
         }
 
         auto positions = std::make_shared<ParticleProperty>(frame.natoms, ParticleProperty::PositionProperty, 0, true);
@@ -138,16 +138,16 @@ json GrainSegmentationService::performGrainSegmentation(
 
         auto orientations = std::make_shared<ParticleProperty>(frame.natoms, DataType::Double, 4, 0, false);
         for(size_t i = 0; i < static_cast<size_t>(frame.natoms); i++){
-            for(int c = 0; c < 4; c++){
-                orientations->setDoubleComponent(i, c, ptmData.orientations->getDoubleComponent(i, c));
-            }
+            const Quaternion q = ptmStates[i].orientation.normalized();
+            orientations->setDoubleComponent(i, 0, q.x());
+            orientations->setDoubleComponent(i, 1, q.y());
+            orientations->setDoubleComponent(i, 2, q.z());
+            orientations->setDoubleComponent(i, 3, q.w());
         }
 
         auto correspondences = std::make_shared<ParticleProperty>(frame.natoms, DataType::Int64, 1, 0, false);
-        {
-            auto* src = reinterpret_cast<const uint64_t*>(ptmData.correspondences->data());
-            auto* dst = reinterpret_cast<uint64_t*>(correspondences->data());
-            std::copy(src, src + frame.natoms, dst);
+        for(size_t i = 0; i < static_cast<size_t>(frame.natoms); ++i){
+            correspondences->setInt64(i, 0);
         }
 
         spdlog::info("Running GrainSegmentationEngine1...");

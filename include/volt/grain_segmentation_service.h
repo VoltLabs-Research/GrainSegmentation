@@ -6,7 +6,8 @@
 #include <volt/core/particle_property.h>
 #include <volt/structures/crystal_structure_types.h>
 #include <volt/analysis/structure_analysis.h>
-#include <volt/analysis/analysis_context.h>
+#include <volt/analysis/structure_analysis_context.h>
+#include <volt/analysis/ptm_local_atom_state.h>
 #include <volt/grain_segmentation_engine.h>
 #include <string>
 
@@ -42,7 +43,7 @@ private:
     json performGrainSegmentation(
         const LammpsParser::Frame &frame,
         const std::vector<int>& structureTypes,
-        const PTMComputationData& ptmData,
+        const std::vector<PtmLocalAtomState>& ptmStates,
         const std::string& outputFile
     );
 };

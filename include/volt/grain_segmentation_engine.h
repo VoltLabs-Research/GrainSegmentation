@@ -5,9 +5,8 @@
 #include <volt/math/matrix3.h>
 #include <volt/math/quaternion.h>
 #include <volt/structures/crystal_structure_types.h>
-#include <volt/polyhedral_template_matching.h>
+#include <volt/analysis/ptm.h>
 #include <volt/analysis/nearest_neighbor_finder.h>
-#include <volt/ptm_neighbor_finder.h>
 
 #include <ptm_functions.h>
 #include <boost/sort/sort.hpp>
@@ -651,14 +650,10 @@ private:
 
 private:
     void createNeighborBonds(){
-        PTMNeighborFinder neighFinder(
-            false, 
-            _positions, 
-            _structuresProperty, 
-            _orientationsProperty, 
-            _correspondencesProperty, 
-            _simCell
-        );
+        PTM neighFinder;
+        if(!neighFinder.prepare(_positions->constDataPoint3(), _numParticles, _simCell)){
+            throw std::runtime_error("Error trying to prepare PTM neighbor finder.");
+        }
 
         using BaseQuery = NearestNeighborFinder::Query<PTM::MAX_INPUT_NEIGHBORS>;
         tbb::enumerable_thread_specific<BaseQuery> baseQueries([&]{
@@ -720,14 +715,10 @@ private:
 
         InterfaceHandler iface(_structuresProperty);
 
-        PTMNeighborFinder neighFinder(
-            false, 
-            _positions,
-            _structuresProperty, 
-            _orientationsProperty, 
-            _correspondencesProperty, 
-            _simCell
-        );
+        PTM neighFinder;
+        if(!neighFinder.prepare(_positions->constDataPoint3(), _numParticles, _simCell)){
+            throw std::runtime_error("Error trying to prepare PTM neighbor finder.");
+        }
 
         using BaseQuery = NearestNeighborFinder::Query<PTM::MAX_INPUT_NEIGHBORS>;
         BaseQuery base(neighFinder);

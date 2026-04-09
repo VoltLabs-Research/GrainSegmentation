@@ -2,6 +2,12 @@
 
 `GrainSegmentation` segments grains from the current frame using PTM-backed local structure information.
 
+## One-Command Install
+
+```bash
+curl -sSL https://raw.githubusercontent.com/VoltLabs-Research/CoreToolkit/main/scripts/install-plugin.sh | bash -s -- GrainSegmentation
+```
+
 ## CLI
 
 Usage:
@@ -23,22 +29,3 @@ grain-segmentation <lammps_file> [output_base] [options]
 | `--outputBonds` | No | Export neighbor bonds. | `false` |
 | `--threads <int>` | No | Maximum worker threads. | auto |
 | `--help` | No | Print CLI help. | |
-
-## Build With CoreToolkit
-
-```bash
-cd /path/to/voltlabs-ecosystem/tools/CoreToolkit
-conan create . -nr
-
-cd /path/to/voltlabs-ecosystem/plugins/StructureIdentification
-conan create . -nr
-
-cd /path/to/voltlabs-ecosystem/plugins/CommonNeighborAnalysis
-conan create . -nr
-
-cd /path/to/voltlabs-ecosystem/plugins/PolyhedralTemplateMatching
-conan create . -nr
-
-cd /path/to/voltlabs-ecosystem/plugins/GrainSegmentation
-conan create . -nr
-```
